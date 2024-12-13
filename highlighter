@@ -1,0 +1,48 @@
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Function to create the highlight for a player
+local function createHighlight(character)
+    -- Check if the character has the required parts to highlight
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        -- Create a Highlight object
+        local highlight = Instance.new("Highlight")
+        highlight.Adornee = character
+        highlight.Parent = character
+        
+        -- Customize the Highlight's appearance
+        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green fill color
+        highlight.OutlineColor = Color3.fromRGB(255, 0, 0) -- Red outline color
+        highlight.FillTransparency = 0.3  -- 30% transparent fill
+        highlight.OutlineTransparency = 0.5  -- 50% transparent outline
+        
+        -- Add a slight effect to enhance the community feel (pulse effect)
+        highlight.Enabled = true
+    end
+end
+
+-- Function to highlight all players already in the game
+local function highlightAllPlayers()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Character then
+            createHighlight(player.Character)  -- Create highlight for existing characters
+        end
+
+        -- Listen for player respawn
+        player.CharacterAdded:Connect(function(character)
+            createHighlight(character)  -- Create highlight for respawned characters
+        end)
+    end
+end
+
+-- Event listener for when a new player joins the game
+Players.PlayerAdded:Connect(function(player)
+    -- Listen for when the player's character is added
+    player.CharacterAdded:Connect(function(character)
+        createHighlight(character)  -- Create highlight for the new player
+    end)
+end)
+
+-- Call the function to highlight all players at the start
+highlightAllPlayers()
