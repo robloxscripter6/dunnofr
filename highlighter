@@ -1,48 +1,192 @@
--- Services
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- Ensure we're tracking the target for Aimbot functionality
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = _G.CircleRadius
 
--- Function to create the highlight for a player
-local function createHighlight(character)
-    -- Check if the character has the required parts to highlight
-    if character and character:FindFirstChild("HumanoidRootPart") then
-        -- Create a Highlight object
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = character
-        highlight.Parent = character
-        
-        -- Customize the Highlight's appearance
-        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green fill color
-        highlight.OutlineColor = Color3.fromRGB(255, 0, 0) -- Red outline color
-        highlight.FillTransparency = 0.3  -- 30% transparent fill
-        highlight.OutlineTransparency = 0.5  -- 50% transparent outline
-        
-        -- Add a slight effect to enhance the community feel (pulse effect)
-        highlight.Enabled = true
-    end
-end
+    for _, target in pairs(Players:GetPlayers()) do
+        if target ~= player then
+            if _G.TeamCheck and target.Team == player.Team then
+                continue -- Skip if on the same team
+            end
 
--- Function to highlight all players already in the game
-local function highlightAllPlayers()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player.Character then
-            createHighlight(player.Character)  -- Create highlight for existing characters
+            local char = target.Character
+            if char and char:FindFirstChild(_G.AimPart) then
+                local distance = (Camera.CFrame.Position - char[_G.AimPart].Position).Magnitude
+                if distance < shortestDistance then
+                    closestPlayer = target
+                    shortestDistance = distance
+                end
+            end
         end
+    end
+    return closestPlayer
+end
 
-        -- Listen for player respawn
-        player.CharacterAdded:Connect(function(character)
-            createHighlight(character)  -- Create highlight for respawned characters
-        end)
+-- Aimbot function to smoothly aim at the closest target's head (or any part defined by AimPart)
+local function aimbot()
+    if aimbotActive and currentTarget then
+        local targetPart = currentTarget.Character[_G.AimPart]
+        if targetPart then
+            local targetPosition = Camera:WorldToScreenPoint(targetPart.Position)
+            local mouse = game:GetService("Players").LocalPlayer:GetMouse()
+            local smoothness = 0.1
+
+            local targetPosition2D = Vector2.new(targetPosition.X, targetPosition.Y)
+            local currentPosition2D = Vector2.new(mouse.X, mouse.Y)
+            local direction = (targetPosition2D - currentPosition2D) * smoothness
+            game:GetService("UserInputService"):SetMouseLocation(currentPosition2D + direction)
+        end
     end
 end
 
--- Event listener for when a new player joins the game
-Players.PlayerAdded:Connect(function(player)
-    -- Listen for when the player's character is added
-    player.CharacterAdded:Connect(function(character)
-        createHighlight(character)  -- Create highlight for the new player
-    end)
+-- Automatically aim and lock onto the target when Aimbot is activated
+RunService.RenderStepped:Connect(function()
+    if aimbotActive then
+        currentTarget = getClosestPlayer()
+        aimbot()
+    end
 end)
 
--- Call the function to highlight all players at the start
-highlightAllPlayers()
+-- ESP Drawing
+local function drawESP(player)
+    if espEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local rootPart = player.Character.HumanoidRootPart
+        local onScreen, screenPosition = Camera:WorldToScreenPoint(rootPart.Position)
+        if onScreen then
+            local espBox = Instance.new("Frame")
+            espBox.Parent = game.CoreGui
+            espBox.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            espBox.BorderSizePixel = 0
+            espBox.Position = UDim2.new(0, screenPosition.X - 25, 0, screenPosition.Y - 25)
+            espBox.Size = UDim2.new(0, 50, 0, 50)
+            espBox.Visible = true
+
+            -- Update ESP position to follow the player
+            game:GetService("RunService").Heartbeat:Connect(function()
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    local rootPart = player.Character.HumanoidRootPart
+                    local onScreen, screenPosition = Camera:WorldToScreenPoint(rootPart.Position)
+                    if onScreen then
+                        espBox.Position = UDim2.new(0, screenPosition.X - 25, 0, screenPosition.Y - 25)
+                    else
+                        espBox:Destroy()  -- Remove ESP box if the player goes off-screen
+                    end
+                end
+            end)
+        end
+    end
+end
+
+-- Loop through all players to apply ESP
+for _, target in pairs(Players:GetPlayers()) do
+    if target ~= player then
+        drawESP(target)
+    end
+end
+
+-- Update the ESP for new players joining
+Players.PlayerAdded:Connect(function(target)
+    if target ~= player then
+        drawESP(target)
+    end
+end)
+
+-- Handle TeamCheck feature in Aimbot and ESP
+_G.TeamCheck = true  -- Ensure this is always enabled
+
+-- Button to toggle TeamCheck
+local TeamCheckButton = Instance.new("TextButton")
+TeamCheckButton.Parent = TabsFrame
+TeamCheckButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+TeamCheckButton.Size = UDim2.new(1, 0, 0, 40)
+TeamCheckButton.Font = Enum.Font.Gotham
+TeamCheckButton.Text = "TeamCheck: ON"
+TeamCheckButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+TeamCheckButton.TextSize = 18
+TeamCheckButton.AutoButtonColor = false
+
+TeamCheckButton.MouseButton1Click:Connect(function()
+    _G.TeamCheck = not _G.TeamCheck
+    TeamCheckButton.Text = "TeamCheck: " .. (_G.TeamCheck and "ON" or "OFF")
+end)
+
+-- Toggle Noclip
+noclipButton.MouseButton1Click:Connect(function()
+    noclipEnabled = not noclipEnabled
+    if noclipEnabled then
+        local character = player.Character
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        humanoid.PlatformStand = true
+        humanoid:GetPropertyChangedSignal("FloorMaterial"):Connect(function()
+            if noclipEnabled then
+                humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+        end)
+    else
+        local character = player.Character
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        humanoid.PlatformStand = false
+        humanoid:ChangeState(Enum.HumanoidStateType.Seated)
+    end
+end)
+
+-- WalkSpeed control (without changing the GUI itself)
+WalkSpeedToggleButton.MouseButton1Click:Connect(function()
+    walkSpeedActive = not walkSpeedActive
+    if walkSpeedActive then
+        WalkSpeedToggleButton.Text = "WalkSpeed: ON"
+        player.Character.Humanoid.WalkSpeed = 50
+    else
+        WalkSpeedToggleButton.Text = "WalkSpeed: OFF"
+        player.Character.Humanoid.WalkSpeed = 16
+    end
+end)
+
+-- Ensure player always has the set walk speed, even if they respawn
+player.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    humanoid.WalkSpeed = 16
+end)
+
+-- Toggle aimbot and lock
+AimbotToggleButton.MouseButton1Click:Connect(function()
+    aimbotActive = not aimbotActive
+    AimbotToggleButton.Text = "Aimbot: " .. (aimbotActive and "ON" or "OFF")
+end)
+
+-- Lock aimbot toggle
+AimbotLockButton.MouseButton1Click:Connect(function()
+    aimbotLocked = not aimbotLocked
+    AimbotLockButton.Text = "Lock Aimbot: " .. (aimbotLocked and "ON" or "OFF")
+end)
+
+-- Handling GUI drag functionality
+MainFrame.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        dragOffset = MainFrame.Position
+    end
+end)
+
+MainFrame.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(dragOffset.X.Scale, dragOffset.X.Offset + delta.X, dragOffset.Y.Scale, dragOffset.Y.Offset + delta.Y)
+    end
+end)
+
+MainFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- Closing the GUI with a keyboard shortcut (ESC)
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Escape then
+        guiOpen = not guiOpen
+        ScreenGui.Enabled = guiOpen
+    end
+end)
